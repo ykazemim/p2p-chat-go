@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"p2p-chat/internal/protocol"
 )
+
+const peerTTL = 30 * time.Second
 
 type Store interface {
 	Set(ctx context.Context, peer protocol.PeerInfo) error
@@ -81,7 +84,7 @@ func (r *RedisStore) Set(ctx context.Context, peer protocol.PeerInfo) error {
 	if err != nil {
 		return err
 	}
-	return r.client.Set(ctx, r.prefix+peer.Username, data, 0).Err()
+	return r.client.Set(ctx, r.prefix+peer.Username, data, peerTTL).Err()
 }
 
 func (r *RedisStore) Get(ctx context.Context, username string) (protocol.PeerInfo, bool, error) {

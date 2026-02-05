@@ -6,9 +6,12 @@ import (
 	"net"
 	"os"
 	"sync"
+	"time"
 
 	"p2p-chat/internal/protocol"
 )
+
+const heartbeatInterval = 15 * time.Second
 
 type MessageCallback func(from, content string)
 type FileCallback func(from, filename string, size int64)
@@ -27,6 +30,8 @@ type Peer struct {
 	connectedTo  string
 	activeConn   net.Conn
 	activeReader *bufio.Reader
+	registeredIP string
+	stopHeartbeat chan struct{}
 
 	onMessage      MessageCallback
 	onFile         FileCallback
@@ -84,7 +89,28 @@ func (p *Peer) Start() error {
 }
 
 func (p *Peer) Register(ip string) error {
-	return p.stunClient.Register(p.username, ip, p.tcpServer.Port())
+	p.registeredIP = ip
+	if err := p.stunClient.Register(p.username, ip, p.tcpServer.Port()); err != nil {
+		return err
+	}
+	p.startHeartbeat()
+	return nil
+}
+
+func (p *Peer) startHeartbeat() {
+	p.stopHeartbeat = make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(heartbeatInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				p.stunClient.Register(p.username, p.registeredIP, p.tcpServer.Port())
+			case <-p.stopHeartbeat:
+				return
+			}
+		}
+	}()
 }
 
 func (p *Peer) GetPeers() ([]protocol.PeerInfo, error) {
@@ -234,6 +260,9 @@ func (p *Peer) Username() string {
 }
 
 func (p *Peer) Close() {
+	if p.stopHeartbeat != nil {
+		close(p.stopHeartbeat)
+	}
 	p.Disconnect()
 	p.tcpServer.Close()
 }
