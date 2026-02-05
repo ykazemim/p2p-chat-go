@@ -1,0 +1,28 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - p2p-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  stun:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.stun
+    ports:
+      - "8080:8080"
+    networks:
+      - p2p-network
+    depends_on:
+      redis:
+        condition: service_healthy
+
+networks:
+  p2p-network:
+    driver: bridge
